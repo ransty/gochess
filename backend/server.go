@@ -1,35 +1,53 @@
 package main
 
 import (
-  "fmt"
+  "bufio"
+  "flag"
   "net"
+  "fmt"
+  "os"
+  "time"
+  "strconv"
 )
 
-func sendResponse(conn *net.UDPConn, addr *net.UDPAddr) {
-  _, err := conn.WriteToUDP([]byte("[Server] : message received "), addr)
-  if err != nil {
-    fmt.Printf("Couldn't send response %v", err)
+var addr = flag.String("addr", "", "Address to listen to; default is \"\" (all interfaces).")
+var port = flag.Int("port", 8080, "The port to listen on; default is 8080.")
+
+func handleConnection(conn net.Conn) {
+  remoteAddr := conn.RemoteAddr().String()
+  fmt.Println("[Client] connected from " + remoteAddr)
+  
+  scanner := bufio.NewScanner(conn)
+  
+  for {
+    ok := scanner.Scan()
+    
+    if !ok {
+      break
+    }
+    
+    handleMessage(scanner.Text(), conn)
   }
+  
+  fmt.Println("[Client] @ " + remoteAddr + " disconnected.")
 }
 
-func main() {
-  p := make([]byte, 2048)
-  addr := net.UDPAddr {
-    Port: 666,
-    IP: net.ParseIP("127.0.0.1"),
-  }
-  ser, err := net.ListenUDP("udp", &addr)
-  if err != nil {
-    fmt.Printf("Something went wrong %v\n", err)
-    return
-  }
-  for {
-    _, remoteaddr, err := ser.ReadFromUDP(p)
-    fmt.Printf("Read a message from %v %s \n", remoteaddr, p)
-    if err != nil {
-      fmt.Printf("Something went wrong %v", err)
-      continue
+func handleMessage(message string, conn net.Conn) {
+  fmt.Println("> " + message)
+  
+  if len(message) > 0 && message[0] == '::' {
+    switch {
+    case message == "::time":
+      resp := "It is " + time.Now().String() + "\n"
+      fmt.Print("< " + resp)
+      conn.Write([]byte(resp))
+    case message == "::quit":
+      fmt.Println("Quitting.")
+      conn.Write([]byte("[Server] Shutting down....\n"))
+      fmt.Println("< " + "%quit%")
+      os.Exit(0)
+    default:
+      conn.Write([]byte("Unrecognized command.\n"))
     }
-    go sendResponse(ser, remoteaddr)
+  } 
 }
-    
